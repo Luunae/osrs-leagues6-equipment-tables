@@ -149,15 +149,20 @@ function buildCellMatrix(table: HTMLTableElement): {
   return { matrix, isHeaderRow };
 }
 
-/** Extract a sortable text representation from cells with images / links. */
-function cellSortText(el: HTMLTableCellElement): string {
-  // Prefer alt text on the first image (used to distinguish members icons, etc).
+/** Best-effort label for a cell that may contain only an icon. */
+function cellLabel(el: HTMLTableCellElement): string {
+  const text = (el.textContent ?? '').trim().replace(/\s+/g, ' ');
+  if (text) return text;
+  // Many OSRS Wiki headers/cells (Stab, Slash, Crush, Magic, Ranged, member
+  // status, ...) render as an icon with no text, so fall back to the alt /
+  // title attribute on the inner image or link.
   const img = el.querySelector('img[alt]');
-  if (img) {
-    const alt = img.getAttribute('alt');
-    if (alt) return alt;
-  }
-  return (el.textContent ?? '').trim();
+  const alt = img?.getAttribute('alt')?.trim();
+  if (alt) return alt;
+  const link = el.querySelector('a[title]');
+  const title = link?.getAttribute('title')?.trim();
+  if (title) return title;
+  return '';
 }
 
 /** Pick a unique key for a column derived from its group + label. */
@@ -209,7 +214,7 @@ export function parseWikiTable(html: string): ParsedTable {
     for (const row of headerRows) {
       const cell = row[c];
       if (!cell) continue;
-      const text = (cell.el.textContent ?? '').trim().replace(/\s+/g, ' ');
+      const text = cellLabel(cell.el);
       if (!text) continue;
       if (labels[labels.length - 1] !== text) labels.push(text);
     }
@@ -244,9 +249,10 @@ export function parseWikiTable(html: string): ParsedTable {
       }
       seenCells.add(cell.el);
       html[col.key] = cell.el.innerHTML;
-      const t = cellSortText(cell.el);
-      text[col.key] = t;
-      num[col.key] = parseWikiNumber(t);
+      const plain = (cell.el.textContent ?? '').trim();
+      const n = parseWikiNumber(plain);
+      text[col.key] = plain || cellLabel(cell.el);
+      num[col.key] = n;
     }
     rows.push({ html, text, num });
   }
